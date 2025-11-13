@@ -4,12 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "concurrently --kill-others  \"npx @tailwindcss/cli -i ./src/styles/main.css -o ./dist/styles/main.css --watch\" \"eleventy --serve\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@11ty/eleventy": "^3.1.2"
+    "@11ty/eleventy": "^3.1.2",
+    "@tailwindcss/cli": "^4.1.17",
+    "concurrently": "^9.2.1",
+    "tailwindcss": "^4.1.17"
   }
 }

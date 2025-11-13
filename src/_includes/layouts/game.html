@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Roll Again</title>
+<link rel="stylesheet" href="./styles/main.css">
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; line-height: 1.5; }
+  .row { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+  #log { border: 1px solid #ccc; padding: .75rem; height: 240px; overflow: auto; background: #fafafa; }
+  .green { font-weight: 700; }
+  button { padding: .5rem .9rem; border-radius: .5rem; border: 1px solid #555; background: #fff; cursor: pointer;}
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  small { color: #666; }
+</style>
+</head>
+<body>
+  <h1>🎲 Roll Again</h1>
+  <p>Enter a name, then click <b>Roll</b>. If you refresh, you lose this run and get a new (secret) die.</p>
+
+  <div class="row">
+    <label for="user">Name:</label>
+    <input id="user" placeholder="e.g., Alex" />
+    <button id="start">Start</button>
+    <button id="roll" disabled>Roll</button>
+    <button id="end" disabled>End Session</button>
+  </div>
+
+  <div class="row"><small id="status">Not started.</small></div>
+  <div id="log"></div>
+
+  <script>
+  (() => {
+    // Hidden die assignment per page load
+    const dieSides = (Math.random() * (200 - 20 +1) + 20) ;
+    let green = 1, red = dieSides - 1;
+    let greens = 0, reds = 0;
+    let started = false;
+    let sessionId = crypto.randomUUID();
+
+    const $ = sel => document.querySelector(sel);
+    const log = (msg, cls="") => {
+      const p = document.createElement("div");
+      p.textContent = msg;
+      if (cls) p.className = cls;
+      $("#log").appendChild(p);
+      $("#log").scrollTop = $("#log").scrollHeight;
+    };
+
+    const updateStatus = () => {
+      const p = (green/(green+red)).toFixed(4);
+      $("#status").textContent = started
+        ? `Session: ${sessionId.slice(0,8)} • Greens: ${greens} • Reds: ${reds} • P(green)=${p}`
+        : `Not started. P(green)=${(green/(green+red)).toFixed(4)} (hidden die)`;
+    };
+
+    const postToLeaderboard = async (payload) => {
+      // Optional: forward to your Netlify function (see Part C)
+      // await fetch('/.netlify/functions/grist-proxy', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(payload)
+      // });
+    };
+
+    $("#start").addEventListener("click", async () => {
+      const user = $("#user").value.trim();
+      if (!user) return alert("Enter a name first.");
+      started = true;
+      $("#roll").disabled = false;
+      $("#end").disabled = false;
+      $("#start").disabled = true;
+      log(`Welcome, ${user}. Keep rolling. Stopping is losing. 🫡`);
+      updateStatus();
+      await postToLeaderboard({ action: "start", sessionId, user, dieSides });
+    });
+
+    $("#roll").addEventListener("click", async () => {
+      if (!started) return;
+      const pGreen = green / (green + red);
+      const isGreen = Math.random() < pGreen;
+      if (isGreen) {
+        greens++;
+        if (red > 0) { red -= 1; green += 1; }
+        log("GREEN! You made your world more likely. ✨", "green");
+      } else {
+        reds++;
+        log("red. Roll again.");
+      }
+      updateStatus();
+      await postToLeaderboard({ action: "roll", sessionId, greens, reds });
+    });
+
+    $("#end").addEventListener("click", async () => {
+      $("#roll").disabled = true;
+      $("#end").disabled = true;
+      log("You stopped. In this game, stopping is the only way to lose. 🙃");
+      await postToLeaderboard({ action: "end", sessionId, greens, reds });
+    });
+
+    updateStatus();
+  })();
+  </script>
+</body>
+</html>
