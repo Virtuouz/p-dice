@@ -1,0 +1,22 @@
+# Misc
+*.log
+npm-debug.*
+*.scssc
+*.swp
+.DS_Store
+Thumbs.db
+.sass-cache
+.env
+.cache
+.Identifier
+.zip
+.repomix
+repomix-output.md
+src/css
+src/images/favicon
+
+# Node modules and output
+**/node_modules/**
+dist
+_site
+.unlighthouse
