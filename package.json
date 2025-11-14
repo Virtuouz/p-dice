@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "concurrently --kill-others  \"npx @tailwindcss/cli -i ./src/styles/main.css -o ./dist/styles/main.css --watch\" \"eleventy --serve\""
+    "start": "concurrently --kill-others  \"npx @tailwindcss/cli -i ./src/styles/main.css -o ./dist/styles/main.css --watch\" \"eleventy --serve\"",
+    "build": "npx eleventy"
   },
   "keywords": [],
   "author": "",
