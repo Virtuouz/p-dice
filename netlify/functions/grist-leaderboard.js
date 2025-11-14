@@ -58,6 +58,7 @@ export default async (request, context) => {
         sessionId,
         username: user,
         dieSides,
+        action,
       });
     } else if (action === "roll") {
       // One row per roll
