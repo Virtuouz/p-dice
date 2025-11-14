@@ -8,7 +8,6 @@ export default async (request, context) => {
   const { GRIST_API_KEY, GRIST_DOC_ID } = process.env;
   const GRIST_BASE = process.env.GRIST_BASE || "https://docs.getgrist.com";
 
-  // Table names can be env vars or hard-coded
   const SESSIONS_TABLE = process.env.GRIST_SESSIONS_TABLE || "sessions";
   const ROLLS_TABLE = process.env.GRIST_ROLLS_TABLE || "rolls";
 
@@ -46,8 +45,55 @@ export default async (request, context) => {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error("Grist error:", res.status, text);
-      throw new Error(`Grist error for table ${tableId}`);
+      console.error("Grist POST error:", res.status, text);
+      throw new Error(`Grist POST error for table ${tableId}`);
+    }
+  };
+
+  const updateSessionAction = async (sessionId, newAction) => {
+    // Find session row by sessionId
+    const filter = encodeURIComponent(
+      JSON.stringify({ sessionId: [sessionId] })
+    );
+    const findUrl = `${GRIST_BASE}/api/docs/${GRIST_DOC_ID}/tables/${SESSIONS_TABLE}/records?filter=${filter}`;
+
+    const foundRes = await fetch(findUrl, { headers });
+    if (!foundRes.ok) {
+      const text = await foundRes.text();
+      console.error("Grist FIND error:", foundRes.status, text);
+      throw new Error("Grist FIND error");
+    }
+
+    const found = await foundRes.json();
+    const records = found.records || [];
+
+    if (records.length === 0) {
+      // Fallback: if somehow start wasn't recorded, create a new session row
+      await postRecord(SESSIONS_TABLE, {
+        sessionId,
+        username: user,
+        dieSides,
+        action: newAction,
+      });
+      return;
+    }
+
+    const id = records[0].id;
+    const patchUrl = `${GRIST_BASE}/api/docs/${GRIST_DOC_ID}/tables/${SESSIONS_TABLE}/records`;
+    const patchBody = JSON.stringify({
+      records: [{ id, fields: { action: newAction } }],
+    });
+
+    const patchRes = await fetch(patchUrl, {
+      method: "PATCH",
+      headers,
+      body: patchBody,
+    });
+
+    if (!patchRes.ok) {
+      const text = await patchRes.text();
+      console.error("Grist PATCH error:", patchRes.status, text);
+      throw new Error("Grist PATCH error");
     }
   };
 
@@ -58,7 +104,7 @@ export default async (request, context) => {
         sessionId,
         username: user,
         dieSides,
-        action,
+        action: "start",
       });
     } else if (action === "roll") {
       // One row per roll
@@ -67,8 +113,8 @@ export default async (request, context) => {
         result, // "red" or "green"
       });
     } else {
-      // For now, ignore "end"/"win"/others on the backend
-      // You can add status logic here later if you add columns.
+      // Any other action updates the `action` column on the session row
+      await updateSessionAction(sessionId, action);
     }
 
     return new Response(

@@ -190,12 +190,12 @@ $("#roll").addEventListener("click", async () => {
     );
 
     // optional: log one final event if you want
-    await postToLeaderboard({
-      action: "roll",
-      sessionId,
-      user: username,
-      result, // result of the final roll
-    });
+await postToLeaderboard({
+    action: "win",
+    sessionId,
+    user: username,
+    dieSides,
+  });
 
     return;
   }
@@ -206,6 +206,20 @@ $("#roll").addEventListener("click", async () => {
     sessionId,
     user: username,
     result,
+  });
+});
+$("#end").addEventListener("click", async () => {
+  if (!started) return;
+
+  $("#roll").disabled = true;
+  $("#end").disabled = true;
+  log("You stopped. In this game, stopping is the only way to lose. 🙃");
+
+  await postToLeaderboard({
+    action: "end",
+    sessionId,
+    user: username,
+    dieSides,
   });
 });
 
