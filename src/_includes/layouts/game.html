@@ -1,106 +1,177 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Roll Again</title>
-<link rel="stylesheet" href="./styles/main.css">
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; line-height: 1.5; }
-  .row { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; }
-  #log { border: 1px solid #ccc; padding: .75rem; height: 240px; overflow: auto; background: #fafafa; }
-  .green { font-weight: 700; }
-  button { padding: .5rem .9rem; border-radius: .5rem; border: 1px solid #555; background: #fff; cursor: pointer;}
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  small { color: #666; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Roll Again</title>
+
+  <!-- Tailwind CDN for demo; swap for your build pipeline if needed -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
 </head>
-<body>
-  <h1>🎲 Roll Again</h1>
-  <p>Enter a name, then click <b>Roll</b>. If you refresh, you lose this run and get a new (secret) die.</p>
+<body class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900 text-slate-100 flex items-center justify-center px-4 py-8">
+  <main class="w-full max-w-2xl space-y-6">
+    <header class="space-y-2 text-center">
+      <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">
+        🎲 Roll Again
+      </h1>
+      <p class="text-sm md:text-base text-slate-300 max-w-xl mx-auto">
+        Enter a name, then click <span class="font-semibold">Roll</span>. 
+        If you refresh, you lose this run and get a new (secret) die.
+      </p>
+    </header>
 
-  <div class="row">
-    <label for="user">Name:</label>
-    <input id="user" placeholder="e.g., Alex" />
-    <button id="start">Start</button>
-    <button id="roll" disabled>Roll</button>
-    <button id="end" disabled>End Session</button>
-  </div>
+    <section
+      class="bg-slate-900/70 border border-slate-700 rounded-2xl p-5 md:p-6 shadow-xl backdrop-blur-md space-y-4"
+    >
+      <!-- Controls -->
+      <div class="flex flex-col md:flex-row md:items-center gap-3">
+        <div class="flex-1">
+          <label for="user" class="block text-xs font-medium text-slate-300 mb-1">
+            Name
+          </label>
+          <input
+            id="user"
+            class="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+            placeholder="e.g., Alex"
+          />
+        </div>
 
-  <div class="row"><small id="status">Not started.</small></div>
-  <div id="log"></div>
+        <div class="flex gap-2 justify-end md:justify-start">
+          <button
+            id="start"
+            class="px-4 py-2 rounded-xl border border-sky-400/60 bg-sky-500/80 text-slate-950 text-sm font-semibold shadow-sm hover:bg-sky-400 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Start
+          </button>
+          <button
+            id="roll"
+            disabled
+            class="px-4 py-2 rounded-xl border border-emerald-400/50 bg-emerald-500/80 text-slate-950 text-sm font-semibold shadow-sm hover:bg-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            _='
+            on click add @disabled to me
+            then wait 250ms
+            then remove @disabled from me
+            '
+          >
+            Roll
+          </button>
+          <button
+            id="end"
+            disabled
+            class="px-4 py-2 rounded-xl border border-rose-400/50 bg-rose-500/80 text-slate-950 text-sm font-semibold shadow-sm hover:bg-rose-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            End
+          </button>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="text-xs text-slate-400">
+        <span id="status">Not started.</span>
+      </div>
+
+      <!-- Log -->
+      <div
+        id="log"
+        class="h-64 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs md:text-sm space-y-1 font-mono"
+      ></div>
+    </section>
+
+    <footer class="text-xs text-slate-500 text-center">
+      In this game, stopping is the only way to lose.
+    </footer>
+  </main>
 
   <script>
-  (() => {
-    // Hidden die assignment per page load
-    const dieSides = (Math.random() * (200 - 20 +1) + 20) ;
-    let green = 1, red = dieSides - 1;
-    let greens = 0, reds = 0;
-    let started = false;
-    let sessionId = crypto.randomUUID();
+    (() => {
+      // Hidden die assignment per page load (either 20 or 200 sides)
+      const minSides = 20;
+      const maxSides = 200;
+      const dieSides = Math.floor(Math.random() * (maxSides - minSides + 1)) + minSides;
+      let green = 1, red = dieSides - 1;
+      let greens = 0, reds = 0;
+      let started = false;
+      let sessionId = crypto.randomUUID();
 
-    const $ = sel => document.querySelector(sel);
-    const log = (msg, cls="") => {
-      const p = document.createElement("div");
-      p.textContent = msg;
-      if (cls) p.className = cls;
-      $("#log").appendChild(p);
-      $("#log").scrollTop = $("#log").scrollHeight;
-    };
+      const $ = (sel) => document.querySelector(sel);
 
-    const updateStatus = () => {
-      const p = (green/(green+red)).toFixed(4);
-      $("#status").textContent = started
-        ? `Session: ${sessionId.slice(0,8)} • Greens: ${greens} • Reds: ${reds} • P(green)=${p}`
-        : `Not started. P(green)=${(green/(green+red)).toFixed(4)} (hidden die)`;
-    };
+      const log = (msg, cls = "") => {
+        const p = document.createElement("div");
+        p.textContent = msg;
+        // base log text style
+        p.className = "text-slate-200";
+        if (cls === "green") {
+          p.classList.add("text-emerald-300", "font-semibold");
+        } else if (cls) {
+          p.classList.add(cls);
+        }
+        $("#log").appendChild(p);
+        $("#log").scrollTop = $("#log").scrollHeight;
+      };
 
-    const postToLeaderboard = async (payload) => {
-      // Optional: forward to your Netlify function (see Part C)
-      // await fetch('/.netlify/functions/grist-proxy', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(payload)
-      // });
-    };
+      const updateStatus = () => {
+        const p = (green / (green + red)).toFixed(4);
+        $("#status").textContent = started
+          ? `Session: ${sessionId.slice(0, 8)} • Greens: ${greens} • Reds: ${reds} • P(green)=${p}`
+          : `Not started. P(green)=${p} (hidden die)`;
+      };
 
-    $("#start").addEventListener("click", async () => {
-      const user = $("#user").value.trim();
-      if (!user) return alert("Enter a name first.");
-      started = true;
-      $("#roll").disabled = false;
-      $("#end").disabled = false;
-      $("#start").disabled = true;
-      log(`Welcome, ${user}. Keep rolling. Stopping is losing. 🫡`);
+      const postToLeaderboard = async (payload) => {
+        // Optional: forward to your Netlify function
+        // await fetch('/.netlify/functions/grist-proxy', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(payload)
+        // });
+      };
+
+      $("#start").addEventListener("click", async () => {
+        const user = $("#user").value.trim();
+        if (!user) return alert("Enter a name first.");
+
+        started = true;
+        $("#roll").disabled = false;
+        $("#end").disabled = false;
+        $("#start").disabled = true;
+
+        log(`Welcome, ${user}. Keep rolling. Stopping is losing. 🫡`);
+        updateStatus();
+
+        await postToLeaderboard({ action: "start", sessionId, user, dieSides });
+      });
+
+      $("#roll").addEventListener("click", async () => {
+        if (!started) return;
+
+        const pGreen = green / (green + red);
+        const isGreen = Math.random() < pGreen;
+
+        if (isGreen) {
+          greens++;
+          if (red > 0) {
+            red -= 1;
+            green += 1;
+          }
+          log("GREEN! You made your world more likely. ✨", "green");
+        } else {
+          reds++;
+          log("red. Roll again.");
+        }
+
+        updateStatus();
+        await postToLeaderboard({ action: "roll", sessionId, greens, reds });
+      });
+
+      $("#end").addEventListener("click", async () => {
+        $("#roll").disabled = true;
+        $("#end").disabled = true;
+        log("You stopped. In this game, stopping is the only way to lose. 🙃");
+        await postToLeaderboard({ action: "end", sessionId, greens, reds });
+      });
+
       updateStatus();
-      await postToLeaderboard({ action: "start", sessionId, user, dieSides });
-    });
-
-    $("#roll").addEventListener("click", async () => {
-      if (!started) return;
-      const pGreen = green / (green + red);
-      const isGreen = Math.random() < pGreen;
-      if (isGreen) {
-        greens++;
-        if (red > 0) { red -= 1; green += 1; }
-        log("GREEN! You made your world more likely. ✨", "green");
-      } else {
-        reds++;
-        log("red. Roll again.");
-      }
-      updateStatus();
-      await postToLeaderboard({ action: "roll", sessionId, greens, reds });
-    });
-
-    $("#end").addEventListener("click", async () => {
-      $("#roll").disabled = true;
-      $("#end").disabled = true;
-      log("You stopped. In this game, stopping is the only way to lose. 🙃");
-      await postToLeaderboard({ action: "end", sessionId, greens, reds });
-    });
-
-    updateStatus();
-  })();
+    })();
   </script>
 </body>
 </html>
