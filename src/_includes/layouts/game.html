@@ -127,14 +127,17 @@
         : `Not started. P(green)=${p} (hidden die)`;
     };
 
-    const postToLeaderboard = async (payload) => {
-      // Optional: forward to your Netlify function
-      // await fetch('/.netlify/functions/grist-proxy', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(payload)
-      // });
-    };
+        const postToLeaderboard = async (payload) => {
+        try {
+            await fetch("/.netlify/functions/grist-leaderboard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            });
+        } catch (err) {
+            console.error("postToLeaderboard failed:", err);
+        }
+        };
 
     $("#start").addEventListener("click", async () => {
       if (started) return;
@@ -199,13 +202,12 @@
       }
 
       // Normal roll update
-      await postToLeaderboard({
-        action: "roll",
-        sessionId,
-        user: username,
-        greens,
-        reds,
-      });
+ await postToLeaderboard({
+    action: "roll",
+    sessionId,
+    user: username,
+    result,
+  });
     });
 
     $("#end").addEventListener("click", async () => {
@@ -215,14 +217,11 @@
       $("#end").disabled = true;
       log("You stopped. In this game, stopping is the only way to lose. 🙃");
 
-      await postToLeaderboard({
-        action: "end",
-        sessionId,
-        user: username,
-        greens,
-        reds,
-        dieSides,
-      });
+        await postToLeaderboard({
+            action: "end",
+            sessionId,
+            user: username,
+        });
     });
 
     updateStatus();
