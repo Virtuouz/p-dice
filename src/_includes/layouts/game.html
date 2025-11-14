@@ -175,6 +175,30 @@
 
       updateStatus();
 
+      // ✅ Win condition: all sides are green
+      if (red === 0) {
+        // Lock the controls
+        $("#roll").disabled = true;
+        $("#end").disabled = true;
+
+        log(
+          `YOU WIN! All ${dieSides} sides of your die are now green. 🌟`,
+          "green"
+        );
+
+        await postToLeaderboard({
+          action: "win",
+          sessionId,
+          user: username,
+          greens,
+          reds,
+          dieSides,
+        });
+
+        return; // stop here; no more rolls
+      }
+
+      // Normal roll update
       await postToLeaderboard({
         action: "roll",
         sessionId,
@@ -197,12 +221,14 @@
         user: username,
         greens,
         reds,
+        dieSides,
       });
     });
 
     updateStatus();
   })();
 </script>
+
 
 </body>
 </html>
