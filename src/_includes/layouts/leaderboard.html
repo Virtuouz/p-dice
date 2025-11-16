@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Roll Again</title>
+
+  <!-- Tailwind CDN for demo -->
+  <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900 text-slate-100 flex items-center justify-center px-4 py-8">
+  <main class="w-full flex flex-col justify-center items-center space-y-6">
+    <header class="space-y-2 text-center">
+      <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">
+        🎲 Roll Again
+      </h1>
+      <p class="text-sm md:text-base text-slate-300 max-w-xl mx-auto">
+        Click <span class="font-semibold">Start</span> to claim your random ID, then
+        keep hitting <span class="font-semibold">Roll</span>. If you refresh, you lose this run
+        and get a new (secret) die.
+      </p>
+    </header>
+
+    <section
+      class="bg-slate-900/70 border border-slate-700 rounded-2xl p-5 md:p-6 shadow-xl backdrop-blur-md space-y-4 max-w-2xl flex-1 w-full"
+    >
+      <!-- Controls -->
+      <div class="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+        <div class="flex-1">
+          <p class="text-xs font-medium text-slate-300 mb-1">
+            Your random ID
+          </p>
+          <p class="inline-flex items-center gap-2 text-sm">
+            <span class="text-slate-400">ID:</span>
+            <span id="userLabel" class="px-2 py-1 rounded-lg bg-slate-950/70 border border-slate-700 font-mono text-emerald-300">
+              (not assigned yet)
+            </span>
+          </p>
+        </div>
+
+        <div class="flex gap-2 justify-end md:justify-start">
+          <button
+            id="start"
+            class="px-4 py-2 rounded-xl border border-sky-400/60 bg-sky-500/80 text-slate-950 text-sm font-semibold shadow-sm hover:bg-sky-400 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Start
+          </button>
+          <button
+            id="roll"
+            disabled
+            class="px-4 py-2 rounded-xl border border-emerald-400/50 bg-emerald-500/80 text-slate-950 text-sm font-semibold shadow-sm hover:bg-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            _='
+            on click add @disabled to me
+            then wait 250ms
+            then remove @disabled from me
+            '
+          >
+            Roll
+          </button>
+          <button
+            id="end"
+            disabled
+            class="px-4 py-2 rounded-xl border border-rose-400/50 bg-rose-500/80 text-slate-950 text-sm font-semibold shadow-sm hover:bg-rose-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            End
+          </button>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="text-xs text-slate-400">
+        <span id="status">Not started.</span>
+      </div>
+
+      <!-- Log -->
+      <div
+        id="log"
+        class="h-64 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs md:text-sm space-y-1 font-mono"
+      ></div>
+    </section>
+
+    <footer class="text-xs text-slate-500 text-center">
+      In this game, stopping is the only way to lose.
+    </footer>
+    <section class="flex-1 w-full">
+        <iframe src="https://vynxlabs.getgrist.com/sDbyUHD573GP/Dice-Rolling/p/3?embed=true" 
+        height="750px" width="100%" frameborder="0">
+</iframe>
+    </section>
+  </main>
+
+<script type="module">
+  import humanId from "https://esm.sh/human-id@4.1.2";
+
+  (() => {
+    // Hidden die: any integer from 20 to 200
+    const dieSides = Math.floor(Math.random() * (200 - 20 + 1)) + 20;
+
+    let green = 1;
+    let red = dieSides - 1;
+    let greens = 0;
+    let reds = 0;
+    let started = false;
+    let finished = false;   // ✅ new: win OR manual end
+    let sessionId = crypto.randomUUID();
+
+    const username = humanId(); // e.g. "ancient-sunrise"
+    const $ = (sel) => document.querySelector(sel);
+
+    $("#userLabel").textContent = username;
+
+    const log = (msg, cls = "") => {
+      const p = document.createElement("div");
+      p.textContent = msg;
+      p.className = "";
+      if (cls === "green") {
+        p.classList.add("text-emerald-300", "font-semibold");
+      } else if (cls) {
+        p.classList.add(cls);
+      }
+      $("#log").appendChild(p);
+      $("#log").scrollTop = $("#log").scrollHeight;
+    };
+
+    const updateStatus = () => {
+      const p = (green / (green + red)).toFixed(4);
+      $("#status").textContent = started
+        ? `User: ${username} • Session: ${sessionId.slice(0, 8)} • Greens: ${greens} • Reds: ${reds} • P(green)=${p}`
+        : `Not started. P(green)=${p} (hidden die)`;
+    };
+
+    // ✅ generic sender; supports normal fetch + unload beacons
+    const postToLeaderboard = async (payload, { beacon = false } = {}) => {
+      const url = "/.netlify/functions/grist-leaderboard";
+      const body = JSON.stringify(payload);
+
+      // For unload, prefer sendBeacon
+      if (beacon && navigator.sendBeacon) {
+        const blob = new Blob([body], { type: "application/json" });
+        navigator.sendBeacon(url, blob);
+        return;
+      }
+
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: beacon, // keepalive for non-beacon fallback
+      });
+    };
+
+    // ✅ used on refresh/close
+    const sendEndIfNeeded = () => {
+      if (!started || finished) return;
+      finished = true; // make sure we only send once
+
+      postToLeaderboard(
+        {
+          action: "end",
+          sessionId,
+          user: username,
+          dieSides,
+        },
+        { beacon: true }
+      );
+    };
+
+    $("#start").addEventListener("click", async () => {
+      if (started) return;
+
+      started = true;
+      $("#roll").disabled = false;
+      $("#end").disabled = false;
+      $("#start").disabled = true;
+
+      log(`Welcome, ${username}. Keep rolling. Stopping is losing. 🫡`);
+      updateStatus();
+
+      await postToLeaderboard({
+        action: "start",
+        sessionId,
+        user: username,
+        dieSides,
+      });
+    });
+
+    $("#roll").addEventListener("click", async () => {
+      if (!started || finished) return;
+
+      const pGreen = green / (green + red);
+      const isGreen = Math.random() < pGreen;
+      const result = isGreen ? "green" : "red";
+
+      if (isGreen) {
+        greens++;
+        if (red > 0) {
+          red -= 1;
+          green += 1;
+        }
+        log("GREEN! You made your world more likely. ✨", "green");
+      } else {
+        reds++;
+        log("red. Roll again.");
+      }
+
+      updateStatus();
+
+      // Win condition
+      if (red === 0) {
+        finished = true;
+        $("#roll").disabled = true;
+        $("#end").disabled = true;
+
+        log(
+          `YOU WIN! All ${dieSides} sides of your die are now green. 🌟`,
+          "green"
+        );
+
+        await postToLeaderboard({
+          action: "win",
+          sessionId,
+          user: username,
+          dieSides,
+        });
+
+        // record the final roll too, if you want
+        await postToLeaderboard({
+          action: "roll",
+          sessionId,
+          user: username,
+          result,
+        });
+
+        return;
+      }
+
+      // Normal roll insert
+      await postToLeaderboard({
+        action: "roll",
+        sessionId,
+        user: username,
+        result,
+      });
+    });
+
+    $("#end").addEventListener("click", async () => {
+      if (!started || finished) return;
+
+      finished = true;
+      $("#roll").disabled = true;
+      $("#end").disabled = true;
+      log("You stopped. In this game, stopping is the only way to lose. 🙃");
+
+      await postToLeaderboard({
+        action: "end",
+        sessionId,
+        user: username,
+        dieSides,
+      });
+    });
+
+    // ✅ fire on refresh / tab close / navigating away
+    window.addEventListener("beforeunload", sendEndIfNeeded);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        sendEndIfNeeded();
+      }
+    });
+
+    updateStatus();
+  })();
+</script>
+
+
+
+</body>
+</html>
