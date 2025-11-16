@@ -86,7 +86,6 @@
   </main>
 
 <script type="module">
-  // ESM-friendly CDN for npm packages
   import humanId from "https://esm.sh/human-id@4.1.2";
 
   (() => {
@@ -98,11 +97,10 @@
     let greens = 0;
     let reds = 0;
     let started = false;
+    let finished = false;   // ✅ new: win OR manual end
     let sessionId = crypto.randomUUID();
 
-    // Generate username once per page load
     const username = humanId(); // e.g. "ancient-sunrise"
-
     const $ = (sel) => document.querySelector(sel);
 
     $("#userLabel").textContent = username;
@@ -127,17 +125,41 @@
         : `Not started. P(green)=${p} (hidden die)`;
     };
 
-        const postToLeaderboard = async (payload) => {
-        try {
-            await fetch("/.netlify/functions/grist-leaderboard", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            });
-        } catch (err) {
-            console.error("postToLeaderboard failed:", err);
-        }
-        };
+    // ✅ generic sender; supports normal fetch + unload beacons
+    const postToLeaderboard = async (payload, { beacon = false } = {}) => {
+      const url = "/.netlify/functions/grist-leaderboard";
+      const body = JSON.stringify(payload);
+
+      // For unload, prefer sendBeacon
+      if (beacon && navigator.sendBeacon) {
+        const blob = new Blob([body], { type: "application/json" });
+        navigator.sendBeacon(url, blob);
+        return;
+      }
+
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: beacon, // keepalive for non-beacon fallback
+      });
+    };
+
+    // ✅ used on refresh/close
+    const sendEndIfNeeded = () => {
+      if (!started || finished) return;
+      finished = true; // make sure we only send once
+
+      postToLeaderboard(
+        {
+          action: "end",
+          sessionId,
+          user: username,
+          dieSides,
+        },
+        { beacon: true }
+      );
+    };
 
     $("#start").addEventListener("click", async () => {
       if (started) return;
@@ -158,74 +180,93 @@
       });
     });
 
-$("#roll").addEventListener("click", async () => {
-  if (!started) return;
+    $("#roll").addEventListener("click", async () => {
+      if (!started || finished) return;
 
-  const pGreen = green / (green + red);
-  const isGreen = Math.random() < pGreen;
-  const result = isGreen ? "green" : "red";
+      const pGreen = green / (green + red);
+      const isGreen = Math.random() < pGreen;
+      const result = isGreen ? "green" : "red";
 
-  if (isGreen) {
-    greens++;
-    if (red > 0) {
-      red -= 1;
-      green += 1;
-    }
-    log("GREEN! You made your world more likely. ✨", "green");
-  } else {
-    reds++;
-    log("red. Roll again.");
-  }
+      if (isGreen) {
+        greens++;
+        if (red > 0) {
+          red -= 1;
+          green += 1;
+        }
+        log("GREEN! You made your world more likely. ✨", "green");
+      } else {
+        reds++;
+        log("red. Roll again.");
+      }
 
-  updateStatus();
+      updateStatus();
 
-  // win condition still works like before
-  if (red === 0) {
-    $("#roll").disabled = true;
-    $("#end").disabled = true;
+      // Win condition
+      if (red === 0) {
+        finished = true;
+        $("#roll").disabled = true;
+        $("#end").disabled = true;
 
-    log(
-      `YOU WIN! All ${dieSides} sides of your die are now green. 🌟`,
-      "green"
-    );
+        log(
+          `YOU WIN! All ${dieSides} sides of your die are now green. 🌟`,
+          "green"
+        );
 
-    // optional: log one final event if you want
-await postToLeaderboard({
-    action: "win",
-    sessionId,
-    user: username,
-    dieSides,
-  });
+        await postToLeaderboard({
+          action: "win",
+          sessionId,
+          user: username,
+          dieSides,
+        });
 
-    return;
-  }
+        // record the final roll too, if you want
+        await postToLeaderboard({
+          action: "roll",
+          sessionId,
+          user: username,
+          result,
+        });
 
-  // Normal roll insert
-  await postToLeaderboard({
-    action: "roll",
-    sessionId,
-    user: username,
-    result,
-  });
-});
-$("#end").addEventListener("click", async () => {
-  if (!started) return;
+        return;
+      }
 
-  $("#roll").disabled = true;
-  $("#end").disabled = true;
-  log("You stopped. In this game, stopping is the only way to lose. 🙃");
+      // Normal roll insert
+      await postToLeaderboard({
+        action: "roll",
+        sessionId,
+        user: username,
+        result,
+      });
+    });
 
-  await postToLeaderboard({
-    action: "end",
-    sessionId,
-    user: username,
-    dieSides,
-  });
-});
+    $("#end").addEventListener("click", async () => {
+      if (!started || finished) return;
+
+      finished = true;
+      $("#roll").disabled = true;
+      $("#end").disabled = true;
+      log("You stopped. In this game, stopping is the only way to lose. 🙃");
+
+      await postToLeaderboard({
+        action: "end",
+        sessionId,
+        user: username,
+        dieSides,
+      });
+    });
+
+    // ✅ fire on refresh / tab close / navigating away
+    window.addEventListener("beforeunload", sendEndIfNeeded);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        sendEndIfNeeded();
+      }
+    });
 
     updateStatus();
   })();
 </script>
+
 
 
 </body>
