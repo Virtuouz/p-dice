@@ -126,8 +126,8 @@
     const updateStatus = () => {
       const p = (green / (green + red)).toFixed(4);
       $("#status").textContent = started
-        ? `User: ${username} • Session: ${sessionId.slice(0, 8)} • Greens: ${greens} • Reds: ${reds} • P(green)=${p}`
-        : `Not started. P(green)=${p} (hidden die)`;
+        ? `User: ${username} • Session: ${sessionId.slice(0, 8)} • Greens: ${greens} • Reds: ${reds}`
+        : `Not started`;
     };
 
     // ✅ generic sender; supports normal fetch + unload beacons
